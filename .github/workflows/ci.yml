@@ -51,4 +51,4 @@ jobs:
         with:
           name: ui-test-screenshots
           path: test-screenshots/
-          if-no-files-found: ignore
+          if-no-files-found: warn

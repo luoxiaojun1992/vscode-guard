@@ -112,22 +112,20 @@ def app(_tk_session_root):
 
 
 @pytest.fixture(autouse=True)
-def screenshot_on_failure(request):
+def screenshot_after_test(request):
     """
-    测试失败时自动截图并保存到 test-screenshots/ 目录。
-    截图文件以测试名称命名，便于 CI artifact 上传后定位问题。
+    每个测试结束后自动截图并保存到 test-screenshots/ 目录。
+    截图文件以测试名称命名，便于 CI artifact 上传后目视确认 UI 状态。
     优先捕获 app fixture 对应的 Tkinter 窗口区域；否则回退到全屏截图。
     """
     yield
-    rep_call = getattr(request.node, "rep_call", None)
-    if rep_call is not None and rep_call.failed:
-        widget = None
-        try:
-            guard = request.getfixturevalue("app")
-            widget = guard.root
-        except pytest.FixtureLookupError:
-            pass
-        _save_screenshot(request.node.nodeid, widget)
+    widget = None
+    try:
+        guard = request.getfixturevalue("app")
+        widget = guard.root
+    except pytest.FixtureLookupError:
+        pass
+    _save_screenshot(request.node.nodeid, widget)
 
 
 def _save_screenshot(nodeid: str, widget: tk.Misc | None = None) -> None:
@@ -170,10 +168,3 @@ def _save_screenshot(nodeid: str, widget: tk.Misc | None = None) -> None:
     except Exception:  # noqa: BLE001 – ImageGrab may raise OSError, RuntimeError, or
         pass           # platform-specific errors on headless runners; always ignore
 
-
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    """将每个测试阶段的报告存储在 item 上，供 screenshot_on_failure fixture 使用。"""
-    outcome = yield
-    rep = outcome.get_result()
-    setattr(item, f"rep_{rep.when}", rep)
