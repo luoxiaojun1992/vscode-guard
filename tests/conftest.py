@@ -116,15 +116,29 @@ def screenshot_on_failure(request):
     """
     测试失败时自动截图并保存到 test-screenshots/ 目录。
     截图文件以测试名称命名，便于 CI artifact 上传后定位问题。
+    优先捕获 app fixture 对应的 Tkinter 窗口区域；否则回退到全屏截图。
     """
     yield
     rep_call = getattr(request.node, "rep_call", None)
     if rep_call is not None and rep_call.failed:
-        _save_screenshot(request.node.nodeid)
+        widget = None
+        try:
+            guard = request.getfixturevalue("app")
+            widget = guard.root
+        except pytest.FixtureLookupError:
+            pass
+        _save_screenshot(request.node.nodeid, widget)
 
 
-def _save_screenshot(nodeid: str) -> None:
-    """捕获全屏截图并保存为 PNG 文件。"""
+def _save_screenshot(nodeid: str, widget: tk.Misc | None = None) -> None:
+    """捕获截图并保存为 PNG 文件。
+
+    优先使用 widget 的屏幕坐标截取指定窗口区域；如无法获取则截取全屏。
+
+    Args:
+        nodeid: pytest 测试节点 ID，用于生成文件名。
+        widget: 可选的 Tkinter widget；若提供则只截取该窗口区域。
+    """
     try:
         from PIL import ImageGrab
     except ImportError:
@@ -137,11 +151,24 @@ def _save_screenshot(nodeid: str) -> None:
     safe_name = nodeid.replace("/", "_").replace("::", "__").replace(" ", "_")
     path = os.path.join(screenshot_dir, f"{safe_name}.png")
 
+    bbox = None
+    if widget is not None:
+        try:
+            widget.update_idletasks()
+            x = widget.winfo_rootx()
+            y = widget.winfo_rooty()
+            w = widget.winfo_width()
+            h = widget.winfo_height()
+            if w > 0 and h > 0:
+                bbox = (x, y, x + w, y + h)
+        except tk.TclError:
+            pass
+
     try:
-        img = ImageGrab.grab()
+        img = ImageGrab.grab(bbox=bbox)
         img.save(path)
-    except OSError:
-        pass
+    except Exception:  # noqa: BLE001 – ImageGrab may raise OSError, RuntimeError, or
+        pass           # platform-specific errors on headless runners; always ignore
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
