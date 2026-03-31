@@ -1,0 +1,46 @@
+name: UI Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  ui-test:
+    # 必须使用 Windows runner：
+    # 应用依赖 winsound / pywin32 / Win32 API，仅支持 Windows。
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Python 3.11 matches the type-hint syntax used in vscode_guard.py
+          # (e.g. `int | None`, `list[int]`) and is available on windows-latest.
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install application dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install test dependencies
+        run: pip install pytest pytest-timeout
+
+      # ── 摄像头模拟说明 ─────────────────────────────────────────────────────
+      # GitHub Actions Windows runner 没有物理摄像头。
+      # 我们在 Python 层通过 tests/fake_camera.py 中的 FakeCapture 类
+      # patch cv2.VideoCapture，返回合成 BGR numpy 帧，
+      # 无需安装任何虚拟摄像头驱动即可完整驱动检测循环。
+      # ──────────────────────────────────────────────────────────────────────
+
+      - name: Run UI tests
+        # DISPLAY 在 Windows 上不需要，但设置 PYTHONUNBUFFERED 有助于实时看到输出
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: pytest tests/ -v --timeout=90

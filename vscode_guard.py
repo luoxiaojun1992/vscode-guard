@@ -25,7 +25,7 @@ class VSCodeGuard:
     HISTORY_SIZE = 8        # 用于判断靠近趋势的帧数
     DETECT_INTERVAL = 3     # 每隔 N 帧做一次检测（降低 CPU）
 
-    def __init__(self):
+    def __init__(self, _root=None):
         self.active = False
         self.cap = None
         self.detect_thread = None
@@ -45,11 +45,13 @@ class VSCodeGuard:
         self.switch_count: int = 0
         self._alarm_active: bool = False  # 当前入侵事件是否已报过警
 
-        self._build_ui()
+        self._build_ui(_root)
 
     # ── UI 构建 ────────────────────────────────
-    def _build_ui(self):
-        self.root = tk.Tk()
+    def _build_ui(self, _root=None):
+        # 当传入父 root 时（测试环境），使用 Toplevel 避免多次创建 Tcl 解释器导致的初始化失败；
+        # 正常运行时创建独立的 Tk 主窗口。
+        self.root = tk.Toplevel(_root) if _root is not None else tk.Tk()
         self.root.title("VSCode 守护者")
         self.root.geometry("740x620")
         self.root.configure(bg="#1e1e2e")
