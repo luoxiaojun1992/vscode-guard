@@ -2,6 +2,7 @@
 pytest fixtures 供所有测试文件共用。
 """
 
+import os
 import sys
 import time
 import types
@@ -108,3 +109,44 @@ def app(_tk_session_root):
         guard.root.destroy()
     except tk.TclError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def screenshot_on_failure(request):
+    """
+    测试失败时自动截图并保存到 test-screenshots/ 目录。
+    截图文件以测试名称命名，便于 CI artifact 上传后定位问题。
+    """
+    yield
+    rep_call = getattr(request.node, "rep_call", None)
+    if rep_call is not None and rep_call.failed:
+        _save_screenshot(request.node.nodeid)
+
+
+def _save_screenshot(nodeid: str) -> None:
+    """捕获全屏截图并保存为 PNG 文件。"""
+    try:
+        from PIL import ImageGrab
+    except ImportError:
+        return
+
+    screenshot_dir = os.path.join(os.getcwd(), "test-screenshots")
+    os.makedirs(screenshot_dir, exist_ok=True)
+
+    # 将测试节点 ID 转换为合法文件名（替换路径分隔符和特殊字符）
+    safe_name = nodeid.replace("/", "_").replace("::", "__").replace(" ", "_")
+    path = os.path.join(screenshot_dir, f"{safe_name}.png")
+
+    try:
+        img = ImageGrab.grab()
+        img.save(path)
+    except OSError:
+        pass
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """将每个测试阶段的报告存储在 item 上，供 screenshot_on_failure fixture 使用。"""
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
