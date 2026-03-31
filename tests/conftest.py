@@ -61,7 +61,7 @@ _ensure_windows_stubs()
 from vscode_guard import VSCodeGuard  # noqa: E402
 
 
-def pump(root: tk.Tk, n: int = 5, delay: float = 0.05) -> None:
+def pump(root: tk.Misc, n: int = 5, delay: float = 0.05) -> None:
     """驱动 Tkinter 事件循环处理积压事件。"""
     for _ in range(n):
         root.update()
@@ -69,10 +69,35 @@ def pump(root: tk.Tk, n: int = 5, delay: float = 0.05) -> None:
         time.sleep(delay)
 
 
+@pytest.fixture(scope="session")
+def _tk_session_root():
+    """
+    整个测试 session 共享唯一一个 tk.Tk() 根窗口。
+
+    背景：在 GitHub Actions 的 Windows runner（Python 3.11.9 toolcache）中，
+    Tcl/Tk 脚本文件（如 ttk/cursors.tcl）不完整。第一次创建 tk.Tk() 时，
+    Tcl 解释器从磁盘加载脚本并缓存到内存；destroy() 后再次创建新解释器时，
+    需重新从磁盘加载，此时发现文件缺失而报错。
+    通过在整个 session 只创建一次 Tk 根窗口，并在每个测试中使用 Toplevel
+    子窗口，可完全规避该问题。
+    """
+    root = tk.Tk()
+    root.withdraw()  # 隐藏根窗口，只显示各测试的 Toplevel 子窗口
+    yield root
+    try:
+        root.destroy()
+    except tk.TclError:
+        pass
+
+
 @pytest.fixture()
-def app():
-    """创建 VSCodeGuard 实例，测试结束后保证清理。"""
-    guard = VSCodeGuard()
+def app(_tk_session_root):
+    """
+    创建 VSCodeGuard 实例，测试结束后保证清理。
+    使用共享的 session 级 Tk 根窗口，每次测试创建 Toplevel 子窗口，
+    避免多次 Tcl 解释器初始化/销毁导致的 TclError。
+    """
+    guard = VSCodeGuard(_root=_tk_session_root)
     yield guard
     if guard.active:
         guard._stop()
