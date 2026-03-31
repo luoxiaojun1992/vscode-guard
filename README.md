@@ -2,7 +2,7 @@
 
 > **当有人靠近时，自动将 VSCode 切换到前台** —— 让老板/同学看到你在"认真写代码"。
 
-![界面预览](https://github.com/user-attachments/assets/eda3d6fe-11d7-4441-b79b-6b76c0e22fce)
+![界面预览](docs/images/preview.png)
 
 ---
 
